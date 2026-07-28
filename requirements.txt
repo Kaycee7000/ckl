@@ -4,3 +4,4 @@ pyarrow
 pytest
 scipy
 networkx
+scikit-learn
