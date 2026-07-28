@@ -28,4 +28,4 @@ def test_fetch_respects_cutoff():
     cutoff = now - timedelta(minutes=15)
     df = pit.fetch("test", "E1", cutoff_timestamp=cutoff, lookback=10)
     assert not df.empty
-    assert pd.to_datetime(df["timestamp"]).max() < pd.to_datetime(cutoff)
+    assert pd.to_datetime(df["timestamp"]).max() < pd.to_datetime(cutoff, utc=True)
