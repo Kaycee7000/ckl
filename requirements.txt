@@ -2,3 +2,4 @@ duckdb
 pandas
 pyarrow
 pytest
+scipy
