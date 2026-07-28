@@ -6,3 +6,6 @@ scipy
 networkx
 scikit-learn
 jsonschema
+pymc
+arviz
+cmdstanpy
