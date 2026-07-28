@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReasoningArtifact",
+  "type": "object",
+  "required": ["id", "name", "version", "preconditions", "structural_equations"],
+  "properties": {
+    "id": {"type": "string"},
+    "name": {"type": "string"},
+    "version": {"type": "string", "pattern": "^v\\d+\\.\\d+\\.\\d+$"},
+    "description": {"type": "string"},
+    "preconditions": {"type": "string"},
+    "structural_equations": {"type": "object"},
+    "causal_graph": {
+      "type": "object",
+      "properties": {
+        "nodes": {"type": "array", "items": {"type": "string"}},
+        "edges": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}
+      }
+    },
+    "bounds": {"type": "object"},
+    "failure_modes": {"type": "array", "items": {"type": "string"}},
+    "metadata": {"type": "object"}
+  },
+  "additionalProperties": false
+}
