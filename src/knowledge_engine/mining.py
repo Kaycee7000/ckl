@@ -1,6 +1,8 @@
 from typing import List, Dict, Tuple
 import networkx as nx
 from collections import Counter
+import itertools
+import numpy as _np
 
 
 def enumerate_connected_subgraphs(G: nx.Graph, k: int):
@@ -13,10 +15,28 @@ def enumerate_connected_subgraphs(G: nx.Graph, k: int):
 
 
 def canonical_graph_str(H: nx.Graph) -> str:
-    # create an isomorphism-invariant signature using degree sequence and
-    # sorted adjacency eigenvalues (rounded)
-    import numpy as _np
+    """Return a canonical string for graph H.
 
+    Strategy (in order):
+    - For small graphs (<=8 nodes), compute canonical adjacency by enumerating
+      all node order permutations and taking the lexicographically smallest
+      adjacency bitstring (exact canonical labeling without external deps).
+    - Otherwise, fall back to a spectral+degree signature as a graceful fallback.
+    """
+    n = H.number_of_nodes()
+    # exact canonical labeling by permutation for small graphs
+    if n <= 8:
+        nodes = list(H.nodes())
+        best = None
+        for perm in itertools.permutations(range(n)):
+            order = [nodes[i] for i in perm]
+            A = nx.to_numpy_array(H, nodelist=order).astype(int)
+            s = ''.join(map(str, A.flatten().tolist()))
+            if best is None or s < best:
+                best = s
+        return f"canon_adj:{best}"
+
+    # fallback: degree sequence + adjacency eigenvalues
     deg = sorted([d for _, d in H.degree()])
     A = nx.to_numpy_array(H)
     try:
