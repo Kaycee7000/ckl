@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["artifact_id", "series"],
+  "properties": {
+    "artifact_id": {"type": "string"},
+    "series": {"type": "array", "items": {"type": "number"}},
+    "window_size": {"type": "integer", "minimum": 1}
+  },
+  "additionalProperties": false
+}
