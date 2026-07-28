@@ -1,52 +1,53 @@
-# CKL — Causal Knowledge + Simulation Library (scaffold)
+# CKL — Causal Knowledge & Simulation Library
 
-This repository contains a scaffold for a modular causal reasoning and simulation platform. It includes:
+A lightweight scaffold for building causal reasoning, simulation, and continuous-learning workflows in Python.
+
+Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Project layout](#project-layout)
+- [Quickstart](#quickstart)
+- [Examples](#examples)
+- [Development](#development)
+- [Contributing](#contributing)
+
+## Overview
+
+CKL provides modular components for historical data ingestion, probabilistic and deterministic modeling, causal reasoning (SCM), multi-scenario simulation, and lightweight MCP-compatible tooling for integrations and automation.
+
+## Features
 
 - Historical data ingestion and point-in-time queries
-- Mathematical modeling (deterministic & probabilistic engines)
-- Causal reasoning (SCM, do-operator, counterfactuals)
-- Multi-scenario simulation, clustering, and sensitivity analysis
-- Historical validation and probabilistic scoring (CRPS, log score, coverage)
-- Knowledge extraction, structured artifact library, and confidence scoring
-- Continuous learning primitives (residual monitoring, proposals, gatekeeper)
-- A lightweight MCP-compatible stdio interface for basic tool calls
+- Probabilistic modeling and Monte Carlo simulation
+- Simple structural causal models (SCM) and counterfactual operators
+- Scenario generation, clustering, and sensitivity analysis
+- Validation utilities and probabilistic scoring (CRPS, log score, coverage)
+- Knowledge extraction and a small artifact library with JSON Schema
+- Continuous-learning primitives: residual monitoring, proposal system, gatekeeper
+- MCP stdio server for simple tool-based integrations
 
-Project layout (key folders)
+## Project layout
 
-- `src/historical_data_engine` — DuckDB storage, ingestion, `PointInTimeQuery`
-- `src/modeling_engine` — Monte Carlo runner, Bayesian updater, dynamics solver
-- `src/causal_engine` — Simple SCM, `do()` operator, counterfactuals
-- `src/simulation_engine` — LHS sampling, `ScenarioRunner`, clustering, sensitivity
-- `src/validation_engine` — Walk-forward backtester and probabilistic metrics
-- `src/knowledge_engine` — Subgraph mining, variable abstraction, confidence scoring
-- `src/knowledge_library` — Artifact JSON Schema + local repository and TF-IDF retrieval
-- `src/continuous_learning` — Residual monitor, proposer, gatekeeper
-- `src/mcp_interface` — MCP tool handlers, request schemas, and stdio server
-- `tests/` — unit tests covering core scaffolds
-- `requirements.txt` — Python dependencies
+- `src/historical_data_engine` — ingestion, DuckDB-backed storage, `PointInTimeQuery`
+- `src/modeling_engine` — Monte Carlo runner, Bayesian helpers, dynamics
+- `src/causal_engine` — SCM implementation, `do()` operator, counterfactual helpers
+- `src/simulation_engine` — scenario sampling, clustering, sensitivity analysis
+- `src/validation_engine` — backtest logic and scoring metrics
+- `src/knowledge_engine` — abstraction, mining, confidence scoring
+- `src/knowledge_library` — artifact schema and local repository
+- `src/continuous_learning` — residual monitor, proposer, gatekeeper
+- `src/mcp_interface` — MCP handlers, request schemas, stdio/sse servers
+- `tests/` — unit tests covering core components
 
-Implementation Roadmap
+## Quickstart
 
-Phase 1: Foundations (Sprints 1–3)
-	- Epic 1: Historical Data Engine
-	- Epic 2: Mathematical Modeling Engine
-	- Epic 9: Basic MCP Server Interface
-
-Phase 2: Intelligence & Simulation (Sprints 4–6)
-	- Epic 3: Causal Reasoning Engine
-	- Epic 4: Multi-Scenario Simulator
-	- Epic 5: Historical Validation Engine
-
-Phase 3: Knowledge & Learning (Sprints 7–9)
-	- Epic 6: Knowledge Extraction Engine
-	- Epic 7: Structured Knowledge Library
-	- Epic 8: Continuous Learning Engine
-
-Quickstart
-
-Install dependencies:
+Create a virtual environment and install dependencies:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
@@ -56,23 +57,40 @@ Run the test suite:
 pytest -q
 ```
 
-Start the simple stdio MCP server (reads JSON lines from stdin):
+Start the local stdio MCP server (reads JSON lines from stdin):
 
 ```bash
 python src/mcp_interface/stdio_server.py
 ```
 
-Example MCP request (send as one JSON line to the server's stdin):
+## Examples
+
+Example MCP request (send one JSON line to the server's stdin):
 
 ```json
 {"tool":"simulate_scenario","payload":{"domain":"test","params":[1,2],"horizon":3}}
 ```
 
-Notes & Next Steps
+Run a quick scenario runner from Python (example usage):
 
-- The repository is a scaffold with minimal implementations and unit tests. For production use, replace local stores with managed services (Postgres/JSONB, vector DB), add authentication, persistence for monitors, and scale-out orchestration.
-- Suggested next improvements: FastMCP integration (SSE), embedding-based semantic search for `knowledge_library`, production backtester hooks, and PyMC-based Bayesian updaters.
+```python
+from src.simulation_engine.scenario import ScenarioRunner
 
-If you want, I can generate a printable roadmap file (Markdown) or open a PR with these changes. 
+runner = ScenarioRunner()
+result = runner.run({'horizon': 10, 'params': {}})
+print(result.summary())
+```
 
-# ckl
+## Development
+
+- Follow the Quickstart to set up a virtualenv.
+- Run `pytest` frequently and add tests for new behavior.
+- Keep changes small and focused; open a PR against `main` with a descriptive title.
+
+## Contributing
+
+Contributions are welcome. Open issues for bugs or feature requests and submit PRs with tests and documentation updates.
+
+----
+
+This README was updated to include a concise Quickstart and examples. If you'd like additional sections (badges, CI, or a generated roadmap file), tell me what to add and I can update the file or open a PR.
