@@ -9,6 +9,17 @@ class SCMNode:
         self.parents = parents
         self.deterministic_fn = deterministic_fn
         self.noise_fn = noise_fn
+        self.inverse_fn = None
+        
+    def __init__(self, name: str, parents: List[str], deterministic_fn: Callable[[Dict[str, Any]], float], noise_fn: Optional[Callable[[], float]] = None, inverse_fn: Optional[Callable[[float, Dict[str, Any]], float]] = None):
+        self.name = name
+        self.parents = parents
+        # deterministic_fn(parents) -> deterministic contribution (may or may not include U)
+        self.deterministic_fn = deterministic_fn
+        # additive noise sampler (U)
+        self.noise_fn = noise_fn
+        # inverse_fn(observed_value, parents) -> inferred noise or latent required to produce observed
+        self.inverse_fn = inverse_fn
 
 
 class SCM:
@@ -21,8 +32,8 @@ class SCM:
     def __init__(self):
         self.nodes: Dict[str, SCMNode] = {}
 
-    def add_node(self, name: str, parents: List[str], deterministic_fn: Callable[[Dict[str, Any]], float], noise_fn: Optional[Callable[[], float]] = None):
-        self.nodes[name] = SCMNode(name, parents, deterministic_fn, noise_fn)
+    def add_node(self, name: str, parents: List[str], deterministic_fn: Callable[[Dict[str, Any]], float], noise_fn: Optional[Callable[[], float]] = None, inverse_fn: Optional[Callable[[float, Dict[str, Any]], float]] = None):
+        self.nodes[name] = SCMNode(name, parents, deterministic_fn, noise_fn, inverse_fn)
 
     def topological_order(self) -> List[str]:
         # simple Kahn's algorithm
@@ -54,8 +65,13 @@ class SCM:
                 node_obj = self.nodes[node]
                 parent_vals = {p: vals[p] for p in node_obj.parents}
                 det = node_obj.deterministic_fn(parent_vals)
-                U = node_obj.noise_fn() if node_obj.noise_fn is not None else 0.0
-                vals[node] = det + U
+                # if additive noise model
+                if node_obj.noise_fn is not None:
+                    U = node_obj.noise_fn()
+                    vals[node] = det + U
+                else:
+                    # assume deterministic_fn already accounts for noise-like behavior
+                    vals[node] = det
             samples.append(vals)
         return samples
 
@@ -69,7 +85,13 @@ class SCM:
         return new
 
     def abduct_noise(self, observed: Dict[str, float]) -> Dict[str, float]:
-        # assumes additive noise: observed[v] = f(parents) + U_v
+        """Abduce latent/noise terms for observed variables.
+
+        Logic:
+        - If a node provides `inverse_fn`, use it to compute the latent (inverse_fn(observed, parent_vals)).
+        - Else, if node has additive noise (noise_fn provided), compute U = observed - f(parents).
+        - Else, raise a RuntimeError for unsupported non-additive/no-inverse nodes.
+        """
         order = self.topological_order()
         inferred_u: Dict[str, float] = {}
         vals: Dict[str, float] = {}
@@ -77,9 +99,34 @@ class SCM:
             node_obj = self.nodes[node]
             parent_vals = {p: vals[p] for p in node_obj.parents}
             det = node_obj.deterministic_fn(parent_vals)
-            U = observed[node] - det
-            inferred_u[node] = U
-            vals[node] = observed[node]
+            if node in observed:
+                obs_val = observed[node]
+                if node_obj.inverse_fn is not None:
+                    # user-provided inverse/abduction function
+                    U = node_obj.inverse_fn(obs_val, parent_vals)
+                    inferred_u[node] = U
+                    # if model is multiplicative or other structure, the node value should be set to observed
+                    vals[node] = obs_val
+                elif node_obj.noise_fn is not None:
+                    # additive noise: U = observed - det
+                    U = obs_val - det
+                    inferred_u[node] = U
+                    vals[node] = obs_val
+                else:
+                    # If node has no parents (exogenous), accept observed value as the latent
+                    if not node_obj.parents:
+                        inferred_u[node] = obs_val
+                        vals[node] = obs_val
+                    else:
+                        raise RuntimeError(f"Cannot abduct for node '{node}': non-additive structural equation without inverse_fn")
+            else:
+                # not observed; simulate forward
+                if node_obj.noise_fn is not None:
+                    U = node_obj.noise_fn()
+                    vals[node] = det + U
+                    inferred_u[node] = U
+                else:
+                    vals[node] = det
         return inferred_u
 
     def counterfactual(self, observed: Dict[str, float], interventions: Dict[str, float], query: str) -> float:
