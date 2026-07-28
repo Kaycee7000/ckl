@@ -1,0 +1,29 @@
+{
+  "id": "test-artifact",
+  "name": "Test Artifact",
+  "version": "v1.0.0",
+  "preconditions": "test preconditions",
+  "structural_equations": {
+    "bias": 0.5
+  },
+  "causal_graph": {
+    "nodes": [
+      "A",
+      "B",
+      "C"
+    ],
+    "edges": [
+      [
+        "A",
+        "B"
+      ],
+      [
+        "B",
+        "C"
+      ]
+    ]
+  },
+  "metadata": {
+    "confidence": 0.8
+  }
+}
