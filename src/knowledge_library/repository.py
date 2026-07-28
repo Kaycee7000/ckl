@@ -1,6 +1,7 @@
 import os
 import json
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from typing import Dict, List, Optional, Tuple
 from jsonschema import validate, ValidationError
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -8,78 +9,111 @@ import numpy as np
 
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema", "artifact_schema.json")
 
+# AWS RDS Endpoint provided
+DEFAULT_RDS_ENDPOINT = "database-1.cvsuygmckyxi.us-east-2.rds.amazonaws.com"
+DEFAULT_DB_PORT = "5432"
+
 
 class ArtifactRepository:
-    def __init__(self, root: str):
-        self.root = root
-        os.makedirs(self.root, exist_ok=True)
-        self.artifacts_dir = os.path.join(self.root, "artifacts")
-        os.makedirs(self.artifacts_dir, exist_ok=True)
-        self.db_path = os.path.join(self.root, "artifacts.db")
+    def __init__(self, root: str = None, db_url: str = None):
+        self.root = root or os.path.dirname(__file__)
+        
+        # Reads DATABASE_URL from environment or falls back to AWS RDS string
+        self.db_url = db_url or os.getenv(
+            "DATABASE_URL",
+            f"postgresql://postgres:YOUR_PASSWORD@{DEFAULT_RDS_ENDPOINT}:{DEFAULT_DB_PORT}/postgres"
+        )
+        self.schema_path = SCHEMA_PATH
         self._init_db()
 
+    def _get_connection(self):
+        """Creates a connection to PostgreSQL."""
+        return psycopg2.connect(self.db_url)
+
     def _init_db(self):
-        self.conn = sqlite3.connect(self.db_path)
-        cur = self.conn.cursor()
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS artifacts (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                version TEXT,
-                path TEXT,
-                preconditions TEXT
-            )
-            """
-        )
-        self.conn.commit()
+        """Initializes the PostgreSQL table schema if it does not exist."""
+        query = """
+        CREATE TABLE IF NOT EXISTS artifacts (
+            id VARCHAR(128) PRIMARY KEY,
+            name VARCHAR(255),
+            version VARCHAR(64),
+            preconditions TEXT,
+            data JSONB NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query)
+            conn.commit()
 
     def validate_artifact(self, artifact: Dict) -> None:
-        with open(SCHEMA_PATH, "r") as f:
-            schema = json.load(f)
-        validate(instance=artifact, schema=schema)
+        if os.path.exists(self.schema_path):
+            with open(self.schema_path, "r") as f:
+                schema = json.load(f)
+            validate(instance=artifact, schema=schema)
 
     def add_artifact(self, artifact: Dict) -> str:
-        # validate
-        try:
-            self.validate_artifact(artifact)
-        except ValidationError as e:
-            raise
+        # Validate JSON schema
+        self.validate_artifact(artifact)
+        
         aid = artifact["id"]
-        path = os.path.join(self.artifacts_dir, f"{aid}.json")
-        with open(path, "w") as f:
-            json.dump(artifact, f, indent=2)
-        cur = self.conn.cursor()
-        cur.execute(
-            "REPLACE INTO artifacts (id, name, version, path, preconditions) VALUES (?, ?, ?, ?, ?)",
-            (aid, artifact.get("name"), artifact.get("version"), path, artifact.get("preconditions", "")),
-        )
-        self.conn.commit()
+        name = artifact.get("name", "")
+        version = artifact.get("version", "v1.0.0")
+        preconditions = artifact.get("preconditions", "")
+        
+        if isinstance(preconditions, list):
+            preconditions_str = " ".join(preconditions)
+        else:
+            preconditions_str = str(preconditions)
+
+        # Insert or update in PostgreSQL
+        query = """
+        INSERT INTO artifacts (id, name, version, preconditions, data)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (id) DO UPDATE 
+        SET name = EXCLUDED.name,
+            version = EXCLUDED.version,
+            preconditions = EXCLUDED.preconditions,
+            data = EXCLUDED.data;
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (aid, name, version, preconditions_str, json.dumps(artifact)))
+            conn.commit()
         return aid
 
     def list_artifacts(self) -> List[Dict]:
-        cur = self.conn.cursor()
-        cur.execute("SELECT id, name, version, path FROM artifacts")
-        rows = cur.fetchall()
-        return [dict(id=r[0], name=r[1], version=r[2], path=r[3]) for r in rows]
+        query = "SELECT id, name, version, preconditions FROM artifacts;"
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(query)
+                rows = cur.fetchall()
+                return [dict(r) for r in rows]
 
     def get_artifact(self, aid: str) -> Optional[Dict]:
-        cur = self.conn.cursor()
-        cur.execute("SELECT path FROM artifacts WHERE id = ?", (aid,))
-        row = cur.fetchone()
-        if not row:
-            return None
-        with open(row[0], "r") as f:
-            return json.load(f)
+        query = "SELECT data FROM artifacts WHERE id = %s;"
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(query, (aid,))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                data = row["data"]
+                return json.loads(data) if isinstance(data, str) else data
 
     def _build_index(self) -> Tuple[TfidfVectorizer, np.ndarray, List[str]]:
-        cur = self.conn.cursor()
-        cur.execute("SELECT id, preconditions FROM artifacts")
-        rows = cur.fetchall()
+        query = "SELECT id, preconditions FROM artifacts;"
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query)
+                rows = cur.fetchall()
+        
         ids = [r[0] for r in rows]
         docs = [r[1] or "" for r in rows]
-        if not docs:
+        if not docs or not any(d.strip() for d in docs):
             return TfidfVectorizer(), np.zeros((0, 0)), ids
+            
         vec = TfidfVectorizer().fit(docs)
         X = vec.transform(docs).toarray()
         return vec, X, ids
@@ -95,5 +129,6 @@ class ArtifactRepository:
         for i in idx:
             aid = ids[i]
             art = self.get_artifact(aid)
-            results.append(dict(artifact=art, score=float(sims[i])))
+            if art:
+                results.append(dict(artifact=art, score=float(sims[i])))
         return results
