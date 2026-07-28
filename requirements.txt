@@ -9,3 +9,5 @@ jsonschema
 pymc
 arviz
 cmdstanpy
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
