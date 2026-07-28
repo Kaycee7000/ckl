@@ -11,3 +11,6 @@ arviz
 cmdstanpy
 sentence-transformers>=2.2.0
 faiss-cpu>=1.7.4
+fastapi>=0.100.0
+uvicorn>=0.22.0
+sse-starlette>=1.6.0
