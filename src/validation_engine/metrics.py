@@ -60,3 +60,42 @@ def calibration_curve(prob_preds: Sequence[float], outcomes: Sequence[int], n_bi
             prop_true[i] = np.nan
             prop_pred[i] = np.nan
     return prop_pred, prop_true
+
+
+def crps_empirical(samples: np.ndarray, x: float) -> float:
+    """Empirical CRPS for predictive samples and observation x.
+
+    Uses the Monte Carlo estimator:
+      CRPS = (1/N) sum_i |s_i - x| - 0.5 * (1/N^2) sum_{i,j} |s_i - s_j|
+
+    Accepts `samples` as a 1-D array of predictive draws, or a 2-D array
+    of shape (N, M) to compute CRPS for M separate predictive vectors (column-wise).
+    Returns a float for 1-D input or a numpy array of length M for 2-D input.
+    """
+    s = np.asarray(samples)
+    if s.ndim == 1:
+        s = s.reshape(-1, 1)
+
+    N, M = s.shape
+    if N == 0:
+        raise ValueError("samples must contain at least one draw")
+
+    # sort each column for efficient pairwise-diff computation
+    s_sorted = np.sort(s, axis=0)
+
+    # mean absolute deviation to observation x
+    abs_to_x = np.mean(np.abs(s - np.asarray(x).reshape(1, -1)), axis=0)
+
+    # compute sum_{i<j} (s_j - s_i) efficiently for each column
+    # formula: sum_{i<j} (s_j - s_i) = sum_k s_sorted[k] * (2*k - N + 1)
+    idx = np.arange(N)
+    coeffs = (2 * idx - N + 1).reshape(N, 1)
+    sum_pairwise = np.sum(s_sorted * coeffs, axis=0)
+
+    mean_pairwise_abs = (2.0 / (N * N)) * sum_pairwise
+
+    crps = abs_to_x - 0.5 * mean_pairwise_abs
+    # if single column, return scalar
+    if crps.size == 1:
+        return float(crps[0])
+    return crps
