@@ -1,7 +1,24 @@
-"""Simple stdio-based MCP server: read JSON lines from stdin, dispatch to handlers, write responses to stdout."""
+"""Simple stdio-based MCP server: read JSON lines from stdin, dispatch to handlers, write responses to stdout.
+
+This file supports both module-style execution (`python -m src.mcp_interface.stdio_server`)
+and direct script execution (`python src/mcp_interface/stdio_server.py`). It first
+attempts the relative import expected when run as a module, and falls back to an
+absolute import after adding the `src/` folder to `sys.path` when run as a script.
+"""
 import sys
+import os
 import json
-from . import handlers
+
+try:
+    # when run as a module (python -m src.mcp_interface.stdio_server)
+    from . import handlers
+except Exception:
+    # running as a script; ensure the repository `src/` root is on sys.path
+    src_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if src_root not in sys.path:
+        sys.path.insert(0, src_root)
+    from mcp_interface import handlers
+
 from knowledge_library.repository import ArtifactRepository
 
 
