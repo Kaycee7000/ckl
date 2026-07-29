@@ -1,7 +1,7 @@
 name: Build and Push to AWS ECR
 
 on:
-  workflow_dispatch: # This line allows you to trigger the build manually
+  workflow_dispatch: 
 
 jobs:
   build:
@@ -10,6 +10,18 @@ jobs:
     steps:
     - name: Check out code
       uses: actions/checkout@v4
+
+    # NEW STEP: Free up ~30GB of disk space before building
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: false
+        docker-images: true
+        swap-storage: true
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
