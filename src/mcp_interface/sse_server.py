@@ -1,3 +1,4 @@
+import os
 import json
 import asyncio
 from fastapi import FastAPI, Request, HTTPException
@@ -7,10 +8,9 @@ from sse_starlette.sse import EventSourceResponse
 from knowledge_library.repository import ArtifactRepository
 from mcp_interface import handlers
 
-
 app = FastAPI(
     title="Simulation Intelligence MCP Server",
-    description="HTTP/SSE transport wrapper for remote AI agents",
+    description="HTTP/SSE transport wrapper for remote AI agents via MCP protocol",
     version="1.0.0",
 )
 
@@ -31,13 +31,10 @@ HANDLERS = {
 # shared artifact repo
 ARTIFACT_REPO = ArtifactRepository('.')
 
-
 @app.get("/sse")
 async def sse_endpoint(request: Request):
     """MCP SSE handshake endpoint."""
-
     async def event_generator():
-        # registration event pointing clients to POST endpoint
         yield {"event": "endpoint", "data": "/messages"}
         while True:
             if await request.is_disconnected():
@@ -46,7 +43,6 @@ async def sse_endpoint(request: Request):
             yield {"event": "ping", "data": "{}"}
 
     return EventSourceResponse(event_generator())
-
 
 @app.post("/messages")
 async def post_mcp_message(request: Request):
@@ -64,8 +60,13 @@ async def post_mcp_message(request: Request):
                 "id": msg_id,
                 "result": {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "Simulation Intelligence MCP Server", "version": "1.0.0"}
+                    "capabilities": {
+                        "tools": {}
+                    },
+                    "serverInfo": {
+                        "name": "Simulation Intelligence MCP Server",
+                        "version": "1.0.0"
+                    }
                 }
             }
 
@@ -79,17 +80,22 @@ async def post_mcp_message(request: Request):
                 {
                     "name": name,
                     "description": f"Execution handler for {name}",
-                    "inputSchema": {"type": "object", "properties": {}}
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {},
+                    }
                 }
                 for name in HANDLERS.keys()
             ]
             return {
                 "jsonrpc": "2.0",
                 "id": msg_id,
-                "result": {"tools": tools_list}
+                "result": {
+                    "tools": tools_list
+                }
             }
 
-        # 4. Handle Tool Execution (tools/call)
+        # 4. Handle Tool Execution
         if method == "tools/call":
             tool_name = params.get("name")
             payload = params.get("arguments", {})
@@ -98,7 +104,10 @@ async def post_mcp_message(request: Request):
                 return {
                     "jsonrpc": "2.0",
                     "id": msg_id,
-                    "error": {"code": -32601, "message": f"Unknown tool '{tool_name}'"}
+                    "error": {
+                        "code": -32601,
+                        "message": f"Unknown tool '{tool_name}'"
+                    }
                 }
 
             handler = HANDLERS[tool_name]
@@ -111,17 +120,34 @@ async def post_mcp_message(request: Request):
                 "jsonrpc": "2.0",
                 "id": msg_id,
                 "result": {
-                    "content": [{"type": "text", "text": str(result)}]
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": str(result)
+                        }
+                    ]
                 }
             }
 
-        return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32601, "message": "Method not found"}}
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "error": {
+                "code": -32601,
+                "message": f"Method not found or unsupported: {method}"
+            }
+        }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        return {
+            "jsonrpc": "2.0",
+            "id": data.get("id") if 'data' in locals() else None,
+            "error": {
+                "code": -32603,
+                "message": str(e)
+            }
+        }
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
