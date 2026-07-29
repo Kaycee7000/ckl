@@ -1,7 +1,10 @@
 name: Build and Push to AWS ECR
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch:
+  push:
+    branches:
+      - main 
 
 jobs:
   build:
@@ -11,7 +14,6 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v4
 
-    # NEW STEP: Free up ~30GB of disk space before building
     - name: Free Disk Space (Ubuntu)
       uses: jlumbroso/free-disk-space@main
       with:
@@ -42,3 +44,7 @@ jobs:
       run: |
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        
+    - name: Force ECS to deploy new image
+      run: |
+        aws ecs update-service --cluster sturdy-giraffe-h7l3sz --service gugan-service-do97ww1z --force-new-deployment
