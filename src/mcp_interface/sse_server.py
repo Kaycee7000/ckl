@@ -50,26 +50,73 @@ async def sse_endpoint(request: Request):
 
 @app.post("/messages")
 async def post_mcp_message(request: Request):
-    """Processes incoming JSON tool requests from remote clients."""
+    """Processes standard Model Context Protocol (MCP) JSON-RPC requests."""
     try:
         data = await request.json()
-        tool_name = data.get("tool")
-        payload = data.get("payload", {})
+        method = data.get("method")
+        msg_id = data.get("id")
+        params = data.get("params", {})
 
-        if tool_name not in HANDLERS:
-            raise HTTPException(status_code=400, detail=f"Unknown tool '{tool_name}'")
+        # 1. Handle MCP Initialization
+        if method == "initialize":
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "Simulation Intelligence MCP Server", "version": "1.0.0"}
+                }
+            }
 
-        handler = HANDLERS[tool_name]
-        # call handler with shared artifact repo when signature accepts it
-        try:
-            result = handler(payload, artifact_repo=ARTIFACT_REPO)
-        except TypeError:
-            # fallback if handler signature differs
-            result = handler(payload)
+        # 2. Acknowledge initialization notification
+        if method == "notifications/initialized":
+            return {"jsonrpc": "2.0", "result": {}}
 
-        return {"jsonrpc": "2.0", "id": data.get("id"), "result": result}
-    except HTTPException:
-        raise
+        # 3. Handle Tool Listing
+        if method == "tools/list":
+            tools_list = [
+                {
+                    "name": name,
+                    "description": f"Execution handler for {name}",
+                    "inputSchema": {"type": "object", "properties": {}}
+                }
+                for name in HANDLERS.keys()
+            ]
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {"tools": tools_list}
+            }
+
+        # 4. Handle Tool Execution (tools/call)
+        if method == "tools/call":
+            tool_name = params.get("name")
+            payload = params.get("arguments", {})
+
+            if tool_name not in HANDLERS:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": msg_id,
+                    "error": {"code": -32601, "message": f"Unknown tool '{tool_name}'"}
+                }
+
+            handler = HANDLERS[tool_name]
+            try:
+                result = handler(payload, artifact_repo=ARTIFACT_REPO)
+            except TypeError:
+                result = handler(payload)
+
+            return {
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {
+                    "content": [{"type": "text", "text": str(result)}]
+                }
+            }
+
+        return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32601, "message": "Method not found"}}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
