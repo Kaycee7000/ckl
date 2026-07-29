@@ -44,7 +44,3 @@ jobs:
       run: |
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        
-    - name: Force ECS to deploy new image
-      run: |
-        aws ecs update-service --cluster sturdy-giraffe-h7l3sz --service gugan-service-do97ww1z --force-new-deployment
