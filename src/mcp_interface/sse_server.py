@@ -1,153 +1,49 @@
 import os
-import json
-import asyncio
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from sse_starlette.sse import EventSourceResponse
-
+from mcp.server.fastmcp import FastMCP
 from knowledge_library.repository import ArtifactRepository
 from mcp_interface import handlers
 
-app = FastAPI(
-    title="Simulation Intelligence MCP Server",
-    description="HTTP/SSE transport wrapper for remote AI agents via MCP protocol",
-    version="1.0.0",
-)
+# Initialize FastMCP server
+mcp = FastMCP("Simulation Intelligence MCP Server")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-HANDLERS = {
-    "simulate_scenario": handlers.simulate_scenario,
-    "explain_causal_chain": handlers.explain_causal_chain,
-    "query_knowledge_library": handlers.query_knowledge_library,
-    "validate_historical_analogue": handlers.validate_historical_analogue,
-}
-
-# shared artifact repo
+# Initialize shared artifact repo
 ARTIFACT_REPO = ArtifactRepository('.')
 
-@app.get("/sse")
-async def sse_endpoint(request: Request):
-    """MCP SSE handshake endpoint."""
-    async def event_generator():
-        yield {"event": "endpoint", "data": "/messages"}
-        while True:
-            if await request.is_disconnected():
-                break
-            await asyncio.sleep(15)
-            yield {"event": "ping", "data": "{}"}
-
-    return EventSourceResponse(event_generator())
-
-@app.post("/messages")
-async def post_mcp_message(request: Request):
-    """Processes standard Model Context Protocol (MCP) JSON-RPC requests."""
+@mcp.tool()
+def simulate_scenario(payload: dict) -> str:
+    """Execution handler for simulate_scenario"""
     try:
-        data = await request.json()
-        method = data.get("method")
-        msg_id = data.get("id")
-        params = data.get("params", {})
+        return str(handlers.simulate_scenario(payload, artifact_repo=ARTIFACT_REPO))
+    except TypeError:
+        return str(handlers.simulate_scenario(payload))
 
-        # 1. Handle MCP Initialization
-        if method == "initialize":
-            return {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {
-                        "tools": {}
-                    },
-                    "serverInfo": {
-                        "name": "Simulation Intelligence MCP Server",
-                        "version": "1.0.0"
-                    }
-                }
-            }
+@mcp.tool()
+def explain_causal_chain(payload: dict) -> str:
+    """Execution handler for explain_causal_chain"""
+    try:
+        return str(handlers.explain_causal_chain(payload, artifact_repo=ARTIFACT_REPO))
+    except TypeError:
+        return str(handlers.explain_causal_chain(payload))
 
-        # 2. Acknowledge initialization notification
-        if method == "notifications/initialized":
-            return {"jsonrpc": "2.0", "result": {}}
+@mcp.tool()
+def query_knowledge_library(payload: dict) -> str:
+    """Execution handler for query_knowledge_library"""
+    try:
+        return str(handlers.query_knowledge_library(payload, artifact_repo=ARTIFACT_REPO))
+    except TypeError:
+        return str(handlers.query_knowledge_library(payload))
 
-        # 3. Handle Tool Listing
-        if method == "tools/list":
-            tools_list = [
-                {
-                    "name": name,
-                    "description": f"Execution handler for {name}",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {},
-                    }
-                }
-                for name in HANDLERS.keys()
-            ]
-            return {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {
-                    "tools": tools_list
-                }
-            }
-
-        # 4. Handle Tool Execution
-        if method == "tools/call":
-            tool_name = params.get("name")
-            payload = params.get("arguments", {})
-
-            if tool_name not in HANDLERS:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": msg_id,
-                    "error": {
-                        "code": -32601,
-                        "message": f"Unknown tool '{tool_name}'"
-                    }
-                }
-
-            handler = HANDLERS[tool_name]
-            try:
-                result = handler(payload, artifact_repo=ARTIFACT_REPO)
-            except TypeError:
-                result = handler(payload)
-
-            return {
-                "jsonrpc": "2.0",
-                "id": msg_id,
-                "result": {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": str(result)
-                        }
-                    ]
-                }
-            }
-
-        return {
-            "jsonrpc": "2.0",
-            "id": msg_id,
-            "error": {
-                "code": -32601,
-                "message": f"Method not found or unsupported: {method}"
-            }
-        }
-
-    except Exception as e:
-        return {
-            "jsonrpc": "2.0",
-            "id": data.get("id") if 'data' in locals() else None,
-            "error": {
-                "code": -32603,
-                "message": str(e)
-            }
-        }
+@mcp.tool()
+def validate_historical_analogue(payload: dict) -> str:
+    """Execution handler for validate_historical_analogue"""
+    try:
+        return str(handlers.validate_historical_analogue(payload, artifact_repo=ARTIFACT_REPO))
+    except TypeError:
+        return str(handlers.validate_historical_analogue(payload))
 
 if __name__ == "__main__":
+    # FastMCP runs a fully compliant SSE/HTTP transport server out of the box
     import uvicorn
+    # If FastMCP exposes an app or custom runner, run via its settings or Starlette app
+    app = mcp.starlette_app()
     uvicorn.run(app, host="0.0.0.0", port=8000)
