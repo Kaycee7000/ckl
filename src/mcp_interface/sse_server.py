@@ -1,5 +1,11 @@
 import os
-from mcp.server.fastmcp import FastMCP
+
+# Safe import for FastMCP across different SDK versions
+try:
+    from fastmcp import FastMCP
+except ImportError:
+    from mcp.server.fastmcp import FastMCP
+
 from knowledge_library.repository import ArtifactRepository
 from mcp_interface import handlers
 
@@ -42,8 +48,13 @@ def validate_historical_analogue(payload: dict) -> str:
         return str(handlers.validate_historical_analogue(payload))
 
 if __name__ == "__main__":
-    # FastMCP runs a fully compliant SSE/HTTP transport server out of the box
-    import uvicorn
-    # If FastMCP exposes an app or custom runner, run via its settings or Starlette app
-    app = mcp.starlette_app()
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    host = os.environ.get("HOST", "0.0.0.0")
+
+    # FastMCP native runner or Uvicorn Starlette fallback
+    try:
+        mcp.run(transport="sse", host=host, port=port)
+    except Exception:
+        import uvicorn
+        app = mcp.starlette_app() if hasattr(mcp, "starlette_app") else mcp.app
+        uvicorn.run(app, host=host, port=port)
