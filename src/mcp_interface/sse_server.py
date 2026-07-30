@@ -1,6 +1,6 @@
+cat << 'EOF' > /app/src/mcp_interface/sse_server.py
 import os
 
-# Safe import for FastMCP across different SDK versions
 try:
     from fastmcp import FastMCP
 except ImportError:
@@ -9,10 +9,7 @@ except ImportError:
 from knowledge_library.repository import ArtifactRepository
 from mcp_interface import handlers
 
-# Initialize FastMCP server
 mcp = FastMCP("Simulation Intelligence MCP Server")
-
-# Initialize shared artifact repo
 ARTIFACT_REPO = ArtifactRepository('.')
 
 @mcp.tool()
@@ -50,11 +47,10 @@ def validate_historical_analogue(payload: dict) -> str:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
-
-    # FastMCP native runner or Uvicorn Starlette fallback
     try:
         mcp.run(transport="sse", host=host, port=port)
     except Exception:
         import uvicorn
         app = mcp.starlette_app() if hasattr(mcp, "starlette_app") else mcp.app
         uvicorn.run(app, host=host, port=port)
+EOF
